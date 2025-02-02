@@ -1,5 +1,3 @@
-//
-// Created by 曹兆勇 on 2024/10/6.
 #include <gtest/gtest.h>
 #include "Order.h"
 #include "OrderBook.h"
@@ -10,6 +8,7 @@ TEST(OrderBookTest, add) {
     Order order2(2, 1001, 1002, 2001, 98, 200, Order::BUY);
     Order order3(3, 1001, 1002, 2001, 97, 300, Order::BUY);
     Order order4(4, 1001, 1002, 2001, 96, 400, Order::BUY);
+
 
     OrderBook<Order> orderBook(false);
     orderBook.addOrder(&order1);

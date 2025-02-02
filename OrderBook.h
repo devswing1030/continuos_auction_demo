@@ -1,6 +1,3 @@
-//
-// Created by 曹兆勇 on 2024/10/6.
-//
 
 #ifndef AUCTION_ORDERBOOK_H
 #define AUCTION_ORDERBOOK_H

@@ -1,5 +1,3 @@
-//
-// Created by 曹兆勇 on 2024/10/6.
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>
 #include "Order.h"
