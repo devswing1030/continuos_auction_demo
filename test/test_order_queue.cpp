@@ -4,20 +4,26 @@
 
 // 单元测试
 TEST(OrderQueueTest, insert) {
+    const std::string tmp = "2001";
+    tSecurityId securityId;
+    std::copy(tmp.begin(), tmp.end(), securityId.begin());
     OrderQueue<Order> orderQueue(97);
-    Order order1(1, 1001, 1002, 2001, 97, 100, Order::BUY);
-    Order order2(2, 1001, 1002, 2001, 97, 300, Order::BUY);
+    Order order1(1, 1001, securityId, 97, 100, Order::BUY);
+    Order order2(2, 1001, securityId, 97, 300, Order::BUY);
     orderQueue.insert(order1);
     orderQueue.insert(order2);
     EXPECT_EQ(orderQueue.getQty(), 400);
 }
 
 TEST(OrderQueueTest, cancel) {
+    const std::string tmp = "2001";
+    tSecurityId securityId;
+    std::copy(tmp.begin(), tmp.end(), securityId.begin());
     OrderQueue<Order> orderQueue(97);
-    Order order1(1, 1001, 1002, 2001, 97, 100, Order::BUY);
-    Order order2(2, 1001, 1002, 2001, 97, 300, Order::BUY);
-    Order order3(3, 1001, 1002, 2001, 97, 500, Order::BUY);
-    Order order4(4, 1001, 1002, 2001, 97, 700, Order::BUY);
+    Order order1(1, 1001, securityId, 97, 100, Order::BUY);
+    Order order2(2, 1001, securityId, 97, 300, Order::BUY);
+    Order order3(3, 1001, securityId, 97, 500, Order::BUY);
+    Order order4(4, 1001, securityId, 97, 700, Order::BUY);
     orderQueue.insert(order1);
     orderQueue.insert(order2);
     orderQueue.insert(order3);
@@ -34,11 +40,14 @@ TEST(OrderQueueTest, cancel) {
 }
 
 TEST(OrderQueueTest, iterator) {
+    const std::string tmp = "2001";
+    tSecurityId securityId;
+    std::copy(tmp.begin(), tmp.end(), securityId.begin());
     OrderQueue<Order> orderQueue(97);
-    Order order1(1, 1001, 1002, 2001, 97, 100, Order::BUY);
-    Order order2(2, 1001, 1002, 2001, 97, 200, Order::BUY);
-    Order order3(3, 1001, 1002, 2001, 97, 300, Order::BUY);
-    Order order4(4, 1001, 1002, 2001, 97, 400, Order::BUY);
+    Order order1(1, 1001, securityId, 97, 100, Order::BUY);
+    Order order2(2, 1001, securityId, 97, 200, Order::BUY);
+    Order order3(3, 1001, securityId, 97, 300, Order::BUY);
+    Order order4(4, 1001, securityId, 97, 400, Order::BUY);
     orderQueue.insert(order1);
     orderQueue.insert(order2);
     orderQueue.insert(order3);
@@ -72,11 +81,15 @@ TEST(OrderQueueTest, iterator) {
 }
 
 TEST(OrderQueueTest, consume) {
+    const std::string tmp = "2001";
+    tSecurityId securityId;
+    std::copy(tmp.begin(), tmp.end(), securityId.begin());
+
     OrderQueue<Order> orderQueue(97);
-    Order order1(1, 1001, 1002, 2001, 97, 100, Order::BUY);
-    Order order2(2, 1001, 1002, 2001, 97, 200, Order::BUY);
-    Order order3(3, 1001, 1002, 2001, 97, 300, Order::BUY);
-    Order order4(4, 1001, 1002, 2001, 97, 400, Order::BUY);
+    Order order1(1, 1001, securityId, 97, 100, Order::BUY);
+    Order order2(2, 1001, securityId, 97, 200, Order::BUY);
+    Order order3(3, 1001, securityId, 97, 300, Order::BUY);
+    Order order4(4, 1001, securityId, 97, 400, Order::BUY);
     orderQueue.insert(order1);
     orderQueue.insert(order2);
     orderQueue.insert(order3);

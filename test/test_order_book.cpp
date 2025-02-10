@@ -4,10 +4,14 @@
 
 // 单元测试
 TEST(OrderBookTest, add) {
-    Order order1(1, 1001, 1002, 2001, 97, 100, Order::BUY);
-    Order order2(2, 1001, 1002, 2001, 98, 200, Order::BUY);
-    Order order3(3, 1001, 1002, 2001, 97, 300, Order::BUY);
-    Order order4(4, 1001, 1002, 2001, 96, 400, Order::BUY);
+    const std::string tmp = "2001";
+    tSecurityId securityId;
+    std::copy(tmp.begin(), tmp.end(), securityId.begin());
+
+    Order order1(1, 1001, securityId, 97, 100, Order::BUY);
+    Order order2(2, 1001, securityId, 98, 200, Order::BUY);
+    Order order3(3, 1001, securityId, 97, 300, Order::BUY);
+    Order order4(4, 1001, securityId, 96, 400, Order::BUY);
 
 
     OrderBook<Order> orderBook(false);
@@ -52,10 +56,14 @@ TEST(OrderBookTest, add) {
 }
 
 TEST(OrderBookTest, cancel) {
-    Order order1(1, 1001, 1002, 2001, 97, 100, Order::BUY);
-    Order order2(2, 1001, 1002, 2001, 98, 200, Order::BUY);
-    Order order3(3, 1001, 1002, 2001, 97, 300, Order::BUY);
-    Order order4(4, 1001, 1002, 2001, 96, 400, Order::BUY);
+    const std::string tmp = "2001";
+    tSecurityId securityId;
+    std::copy(tmp.begin(), tmp.end(), securityId.begin());
+
+    Order order1(1, 1001, securityId, 97, 100, Order::BUY);
+    Order order2(2, 1001, securityId, 98, 200, Order::BUY);
+    Order order3(3, 1001, securityId, 97, 300, Order::BUY);
+    Order order4(4, 1001, securityId, 96, 400, Order::BUY);
 
     OrderBook<Order> orderBook(false);
     orderBook.addOrder(&order1);

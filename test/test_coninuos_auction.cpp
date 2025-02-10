@@ -18,29 +18,33 @@ public:
 
 // 单元测试
 TEST(ContinuosAuctionTest, process) {
+    const std::string tmp = "2001";
+    tSecurityId securityId;
+    std::copy(tmp.begin(), tmp.end(), securityId.begin());
+
     OrderBook<Order> buyOrderBook(true);
     OrderBook<Order> sellOrderBook(false);
     ContinuosAuction<Order, TestAuctionSession> auction(buyOrderBook, sellOrderBook);
     MockAuctionSession session;
 
-    Order order1(1, 1001, 1002, 2001, 99, 100, Order::BUY);
-    Order order2(2, 1001, 1002, 2001, 98, 200, Order::BUY);
-    Order order3(3, 1001, 1002, 2001, 98, 300, Order::BUY);
-    Order order4(4, 1001, 1002, 2001, 96, 400, Order::BUY);
+    Order order1(1, 1001, securityId, 99, 100, Order::BUY);
+    Order order2(2, 1001, securityId, 98, 200, Order::BUY);
+    Order order3(3, 1001, securityId, 98, 300, Order::BUY);
+    Order order4(4, 1001, securityId, 96, 400, Order::BUY);
     auction.processNewOrder(&order1, &session);
     auction.processNewOrder(&order2, &session);
     auction.processNewOrder(&order3, &session);
     auction.processNewOrder(&order4, &session);
 
 
-    Order order5(5, 1001, 1002, 2001, 97, 400, Order::SELL);
+    Order order5(5, 1001, securityId, 97, 400, Order::SELL);
 
     //EXPECT_CALL(session, onExecution(&order5, &order1, 100, 96));
     //EXPECT_CALL(session, onExecution(&order5, &order2, 200, 97));
     //EXPECT_CALL(session, onExecution(&order5, &order3, 100, 97));
     auction.processNewOrder(&order5, &session);
 
-    Order order6(6, 1001, 1002, 2001, 95, 800, Order::SELL);
+    Order order6(6, 1001, securityId, 95, 800, Order::SELL);
     auction.processNewOrder(&order6, &session);
 }
 //

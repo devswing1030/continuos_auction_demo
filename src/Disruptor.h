@@ -1,6 +1,6 @@
 
-#ifndef AUCTION_RINGBUFFER_H
-#define AUCTION_RINGBUFFER_H
+#ifndef AUCTION_DISRUPTOR_H
+#define AUCTION_DISRUPTOR_H
 
 #include <iostream>
 #include <vector>
@@ -9,57 +9,70 @@
 #include <condition_variable>
 #include <stdexcept>
 
+/**
+ * Event handler interface
+ *
+ * @tparam T Event type
+ */
 template <typename T>
-class DisruptorHandler {
+class EventHandler {
 public:
+    /**
+     * Handle an event. All event handlers must implement this method.
+     * Every event handler will receive all events.
+     *
+     * @param event Event to handle
+     * @param sequence Sequence number of the event in the ring buffer
+     */
     virtual void onEvent(T& event, int sequence) = 0;
 };
-template <typename T>
-class RingBuffer;
+
 
 template <typename T>
-class Sequencer;
+class Disruptor;
+
 
 template <typename T>
 class Consumer {
 private:
-    DisruptorHandler<T>* handler;
-    int position = -1;
+    EventHandler<T>* handler;
+    int last_consumed = -1;   // Last consumed position, and the event at this position has been processed
     bool stopped = false;
     std::thread thread;
-    RingBuffer<T>* ringBuffer;
+    Disruptor<T>* disruptor;
     int sequencer_idx;
 
 
-    void run(RingBuffer<T>* ringBuffer) {
+    void run(Disruptor<T>* disruptor) {
         while (!stopped) {
-            auto [event, nextPosition] = ringBuffer->get(sequencer_idx, position);
-            if (nextPosition == -1) {
+            auto [event, retrieved] = disruptor->Get(sequencer_idx, last_consumed);
+            if (retrieved == -1) {
                 break;
             }
-            handler->onEvent(*event, nextPosition);
-            ringBuffer->notify(sequencer_idx, nextPosition, this);
+            handler->onEvent(*event, retrieved);
+            // update last consumed position in the Notify function, ensure update with the same lock
+            disruptor->Notify(sequencer_idx, retrieved, this);
         }
     }
 public:
-    explicit Consumer(DisruptorHandler<T>* handler, int sequencer_idx, RingBuffer<T>* ringBuffer)
-            : handler(handler), sequencer_idx(sequencer_idx), ringBuffer(ringBuffer) {
+    explicit Consumer(EventHandler<T>* handler, int sequencer_idx, Disruptor<T>* disruptor)
+            : handler(handler), sequencer_idx(sequencer_idx), disruptor(disruptor) {
     }
 
     void Start() {
-        thread = std::thread(&Consumer::run, this, ringBuffer);
+        thread = std::thread(&Consumer::run, this, disruptor);
     }
 
     void Stop() {
         stopped = true;
     }
 
-    int GetPosition() {
-        return position;
+    int GetLastConsumed() {
+        return last_consumed;
     }
 
-    void SetPosition(int position) {
-        this->position = position;
+    void SetLastConsumed(int position) {
+        this->last_consumed = position;
     }
 
     void Join() {
@@ -74,14 +87,13 @@ public:
 
 template <typename T>
 class Sequencer {
-private:
+public:
     std::vector<Consumer<T>*> consumers;
     std::condition_variable position_released;
-    bool stopped = false;
 public:
-    explicit Sequencer(std::vector<DisruptorHandler<T>*> handlers, int idx, RingBuffer<T>* ringBuffer) {
+    explicit Sequencer(std::vector<EventHandler<T>*> handlers, int idx, Disruptor<T>* disruptor) {
         for (auto handler : handlers) {
-            consumers.push_back(new Consumer<T>(handler, idx, ringBuffer));
+            consumers.push_back(new Consumer<T>(handler, idx, disruptor));
         }
     }
 
@@ -92,7 +104,6 @@ public:
     }
 
     void Stop() {
-        stopped = true;
         for (auto& consumer : consumers) {
             consumer->Stop();
         }
@@ -104,10 +115,10 @@ public:
 
     bool IsReleased(int head, int position, int capacity) {
         for (int i = 0; i < consumers.size(); i++) {
-            if (consumers[i]->GetPosition() == -1) {
+            if (consumers[i]->GetLastConsumed() == -1) {
                 return false;
             }
-            int next_position = (consumers[i]->GetPosition() + 1) % capacity;
+            int next_position = (consumers[i]->GetLastConsumed() + 1) % capacity;
             if (next_position >= head && position >= head) {
                 if (next_position <= position) {
                     return false;
@@ -126,19 +137,11 @@ public:
         }
         return true;
     }
-
-    void notify() {
-        position_released.notify_all();
-    }
-
-    void wait(int position, std::unique_lock<std::mutex>& lock, int head, int capacity) {
-        position_released.wait(lock, [this, head, position, capacity]() { return IsReleased(head, position, capacity) || stopped;});
-    }
 };
 
 // A thread-safe ring buffer implementation
 template <typename T>
-class RingBuffer {
+class Disruptor {
 private:
     std::vector<T> buffer;                // Internal buffer to hold elements
     size_t capacity;                      // Maximum capacity of the buffer
@@ -148,38 +151,61 @@ private:
     std::mutex mtx;                       // Mutex to protect shared data
     std::condition_variable not_full;     // Condition variable for "not full" state
     std::condition_variable not_empty;    // Condition variable for "not empty" state
-
     std::vector<Sequencer<T>*> sequencers;
-
     bool stopped = false;
+    friend class Consumer<T>;
 
 public:
-    // Constructor: Initialize the ring buffer with a given capacity
-    explicit RingBuffer(size_t cap)
+    /**
+     * Constructor: Initialize the ring buffer with a given capacity
+     *
+     * @param cap Maximum capacity of the buffer
+     */
+    explicit Disruptor(size_t cap)
             : buffer(cap), capacity(cap), head(0), tail(0), size(0) {}
 
-    void ChainHandler(std::vector<DisruptorHandler<T>*> handlers) {
+    /**
+     * Add a chain of event handlers to the disruptor. The handlers in one chain will process events concurrently.
+     * The chains will process events sequentially in the order they are added.
+     *
+     * @param handlers A vector of event handlers
+     */
+    void Chain(std::vector<EventHandler<T>*> handlers) {
         std::unique_lock<std::mutex> lock(mtx);
         sequencers.push_back(new Sequencer<T>(handlers, sequencers.size(), this));
     }
 
+    /**
+     * Start the disruptor. This will start all event handlers in the disruptor.
+     */
     void Start() {
         for (auto& sequencer : sequencers) {
             sequencer->Start();
         }
     }
 
-    void Stop() {
+    /**
+     * Stop the disruptor. This will stop all event handlers in the disruptor.
+     */
+    void Stop(bool force = true) {
+        if (!force) {
+            while (size > 0) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+        }
         stopped = true;
         not_empty.notify_all();
         for (auto& sequencer : sequencers) {
             sequencer->Stop();
         }
-
     }
 
-    // Push an element into the ring buffer (blocks if the buffer is full)
-    void push(const T& item) {
+    /**
+     * Push an element to the buffer. This method will block if the buffer is full.
+     *
+     * @param item Element to push
+     */
+    void Push(const T& item) {
         std::unique_lock<std::mutex> lock(mtx);
         // Wait until the buffer is not full
         not_full.wait(lock, [this]() { return size < capacity - 1; });
@@ -193,26 +219,10 @@ public:
         not_empty.notify_all();
     }
 
-    // Pop an element from the ring buffer (blocks if the buffer is empty)
-    T pop() {
+protected:
+    void Notify(int sequencer_idx, int position, Consumer<T>* consumer) {
         std::unique_lock<std::mutex> lock(mtx);
-        // Wait until the buffer is not empty
-        not_empty.wait(lock, [this]() { return size > 0; });
-
-        // Retrieve the front element
-        T item = buffer[head];
-        head = (head + 1) % capacity;
-        --size;
-
-        // Notify a producer that there is space available
-        not_full.notify_one();
-
-        return item;
-    }
-
-    void notify(int sequencer_idx, int position, Consumer<T>* consumer) {
-        std::unique_lock<std::mutex> lock(mtx);
-        consumer->SetPosition(position);
+        consumer->SetLastConsumed(position);
         if (this->sequencers[sequencer_idx]->IsReleased(head, position, capacity)) {
             if (sequencer_idx == sequencers.size() - 1) {
                 head = (head + 1) % capacity;
@@ -221,14 +231,14 @@ public:
                 // Notify a producer that there is space available
                 not_full.notify_one();
             } else {
-                sequencers[sequencer_idx]->notify();
+                sequencers[sequencer_idx]->position_released.notify_all();
             }
         }
     }
 
-    std::pair<T*, int> get(int sequencer_idx, int position) {
+    std::pair<T*, int> Get(int sequencer_idx, int position) {
         std::unique_lock<std::mutex> lock(mtx);
-        //std::cout << "get" << sequencer_idx << " " << position << std::endl;
+        //std::cout << "get" << sequencer_idx << " " << last_consumed << std::endl;
         if (sequencer_idx == 0) {
             if (position == -1) {
                 not_empty.wait(lock, [this]() { return size > 0 || stopped; });
@@ -238,7 +248,9 @@ public:
             }
         }
         else {
-            sequencers[sequencer_idx -1]->wait((position + 1) % capacity, lock, head, capacity);
+            sequencers[sequencer_idx -1]->position_released.wait(lock, [this, position, sequencer_idx]() {
+                int next_position = (position + 1) % capacity;
+                return sequencers[sequencer_idx -1]->IsReleased(head, next_position, capacity) || stopped;});
         }
         if (stopped) {
             return std::pair(nullptr, -1);
@@ -247,4 +259,4 @@ public:
     }
 };
 
-#endif //AUCTION_RINGBUFFER_H
+#endif //AUCTION_DISRUPTOR_H

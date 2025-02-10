@@ -1,5 +1,5 @@
 #include <gtest/gtest.h>
-#include "RingBuffer.h"
+#include "Disruptor.h"
 #include <thread>
 
 class Event {
@@ -11,21 +11,33 @@ public:
     Event(int value) : value(value) {}
 };
 
-class Handler1 : public DisruptorHandler<Event> {
+class Handler1 : public EventHandler<Event> {
+private:
+    int tag;
 public:
+    Handler1(int tag) : tag(tag) {
+    }
     void onEvent(Event& event, int sequence) override {
+        if (sequence % 3 != tag)
+            return;
         event.value1 = new int(event.value);
     }
 };
 
-class Handler2 : public DisruptorHandler<Event> {
+class Handler2 : public EventHandler<Event> {
+private:
+    int tag;
 public:
+    Handler2(int tag) : tag(tag) {
+    }
     void onEvent(Event& event, int sequence) override {
+        if (sequence % 3 != tag)
+            return;
         event.value2 = *event.value1;
     }
 };
 
-class Handler3 : public DisruptorHandler<Event> {
+class Handler3 : public EventHandler<Event> {
 private:
     int value = 0;
 public:
@@ -36,27 +48,31 @@ public:
 };
 
     void test() {
-        RingBuffer<Event> buffer(1024);
+        Disruptor<Event> buffer(1024);
 
-        std::vector<DisruptorHandler<Event>*> handlers1;
-        handlers1.push_back(new Handler1());
-        std::vector<DisruptorHandler<Event>*> handlers2;
-        handlers2.push_back(new Handler2());
-        std::vector<DisruptorHandler<Event>*> handlers3;
+        std::vector<EventHandler<Event>*> handlers1;
+        for (int i = 0; i < 3; i++) {
+            handlers1.push_back(new Handler1(i));
+        }
+        std::vector<EventHandler<Event>*> handlers2;
+        for (int i = 0; i < 3; i++) {
+            handlers2.push_back(new Handler2(i));
+        }
+        std::vector<EventHandler<Event>*> handlers3;
         handlers3.push_back(new Handler3());
 
-        buffer.ChainHandler(handlers1);
-        buffer.ChainHandler(handlers2);
-        buffer.ChainHandler(handlers3);
+        buffer.Chain(handlers1);
+        buffer.Chain(handlers2);
+        buffer.Chain(handlers3);
 
         buffer.Start();
 
         // calculate time elapse
         auto start = std::chrono::high_resolution_clock::now();
 
-        for (int i = 0; i < 20000; i++) {
+        for (int i = 0; i < 2000000; i++) {
             Event event(i);
-            buffer.push(event);
+            buffer.Push(event);
         }
 
         buffer.Stop();
@@ -74,7 +90,7 @@ TEST(RingBufferTest, performance) {
     }
 
 /*
-    void consumer(RingBuffer<int>& buffer) {
+    void consumer(Disruptor<int>& buffer) {
         for (int i = 0; i < 10; i++) {
             int value = buffer.pop();
             EXPECT_EQ(value, i);
@@ -82,11 +98,11 @@ TEST(RingBufferTest, performance) {
     }
 
 TEST(RingBufferTest1, func) {
-    RingBuffer<int> buffer(1024);
+    Disruptor<int> buffer(1024);
 
     std::thread t1(consumer, std::ref(buffer));
     for (int i = 0; i < 10; i++) {
-        buffer.push(i);
+        buffer.Push(i);
     }
     t1.join();
 }
